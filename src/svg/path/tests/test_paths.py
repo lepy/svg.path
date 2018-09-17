@@ -315,9 +315,22 @@ class QuadraticBezierTest(unittest.TestCase):
         self.assertAlmostEqual(path2.point(1), (1000 + 300j))
 
     def test_length(self):
-        # calculated with the cubic bezier length estimation
-        path1 = QuadraticBezier(200 + 300j, 400 + 50j, 600 + 300j)
-        self.assertAlmostEqual(path1.length(), 487.7710938890204)
+        # expected results calculated with
+        # svg.path.segment_length(q, 0, 1, q.start, q.end, 1e-14, 20, 0)
+        q1 = QuadraticBezier(200 + 300j, 400 + 50j, 600 + 300j)
+        q2 = QuadraticBezier(200 + 300j, 400 + 50j, 500 + 200j)
+        closedq = QuadraticBezier(6+2j, 5-1j, 6+2j)
+        linq1 = QuadraticBezier(1, 2, 3)
+        linq2 = QuadraticBezier(1+3j, 2+5j, -9 - 17j)
+        nodalq = QuadraticBezier(1, 1, 1)
+        tests = [(q1, 487.77109389525975),
+                 (q2, 379.90458193489155),
+                 (closedq, 3.1622776601683795),
+                 (linq1, 2),
+                 (linq2, 22.73335777124786),
+                 (nodalq, 0)]
+        for q, exp_res in tests:
+            self.assertAlmostEqual(q.length(), exp_res)
 
     def test_equality(self):
         # This is to test the __eq__ and __ne__ methods, so we can't use
@@ -413,6 +426,13 @@ class ArcTest(unittest.TestCase):
         segment = Arc(0j, 100 + 50j, 0, 0, 0, 100 + 50j)
         self.assertTrue(segment == Arc(0j, 100 + 50j, 0, 0, 0, 100 + 50j))
         self.assertTrue(segment != Arc(0j, 100 + 50j, 0, 1, 0, 100 + 50j))
+
+    def test_issue25(self):
+        # This raised a math domain error
+        Arc((725.307482225571-915.5548199281527j),
+            (202.79421639137703+148.77294617167183j),
+            225.6910319606926, 1, 1,
+            (-624.6375539637027+896.5483089399895j))
 
 
 class TestPath(unittest.TestCase):
@@ -523,3 +543,10 @@ class TestPath(unittest.TestCase):
         # It's not equal to a list of it's segments
         self.assertTrue(path1 != path1[:])
         self.assertFalse(path1 == path1[:])
+
+    def test_non_arc(self):
+        # And arc with the same start and end is a noop.
+        segment = Arc(0j + 70j, 35 + 35j, 0, 1, 0, 0 + 70j)
+        self.assertEqual(segment.length(), 0)
+        self.assertEqual(segment.point(0.5), segment.start)
+

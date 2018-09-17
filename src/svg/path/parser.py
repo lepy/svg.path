@@ -45,6 +45,7 @@ def parse_path(pathdef, current_pos=0j):
             if command is None:
                 raise ValueError("Unallowed implicit command in %s, position %s" % (
                     pathdef, len(pathdef.split()) - len(elements)))
+            last_command = command  # Used by S and T
 
         if command == 'M':
             # Moveto command.
@@ -55,7 +56,7 @@ def parse_path(pathdef, current_pos=0j):
                 current_pos = pos
             else:
                 current_pos += pos
-
+            segments.append(path.Move(current_pos))
             # when M is called, reset start_pos
             # This behavior of Z is defined in svg spec:
             # http://www.w3.org/TR/SVG/paths.html#PathDataClosePathCommand
@@ -68,7 +69,8 @@ def parse_path(pathdef, current_pos=0j):
 
         elif command == 'Z':
             # Close path
-            segments.append(path.Line(current_pos, start_pos))
+            if current_pos != start_pos:
+                segments.append(path.Line(current_pos, start_pos))
             segments.closed = True
             current_pos = start_pos
             start_pos = None

@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import os
 
-version = '2.0dev0'
+version = '3.1.dev0'
 
 long_description = (
     open('README.rst').read()
@@ -21,24 +21,23 @@ setup(name='svg.path',
       # Get more strings from
       # http://pypi.python.org/pypi?%3Aaction=list_classifiers
       classifiers=[
-          'Development Status :: 4 - Beta',
+          'Development Status :: 5 - Production/Stable',
           'Intended Audience :: Developers',
-          'License :: MIT',
+          'License :: OSI Approved :: MIT License',
           'Operating System :: OS Independent',
           'Programming Language :: Python',
           'Programming Language :: Python :: 2.6',
           'Programming Language :: Python :: 2.7',
           'Programming Language :: Python :: 3',
-          'Programming Language :: Python :: 3.1',
-          'Programming Language :: Python :: 3.2',
           'Programming Language :: Python :: 3.3',
           'Programming Language :: Python :: 3.4',
+          'Programming Language :: Python :: 3.5',
+          'Programming Language :: Python :: 3.6',
           'Programming Language :: Python :: Implementation :: PyPy',
-          'Programming Language :: Python :: Implementation :: Jython',
           'Topic :: Multimedia :: Graphics'
           ],
       keywords='svg path maths',
-      author='Lenart Regebro',
+      author='Lennart Regebro',
       author_email='regebro@gmail.com',
       url='https://github.com/regebro/svg.path',
       license='MIT',

@@ -136,23 +136,34 @@ class QuadraticBezier(object):
                pos ** 2 * self.end
 
     def length(self, error=None, min_depth=None):
-        # http://www.malczak.info/blog/quadratic-bezier-curve-length/
-        a = self.start - 2 * self.control + self.end
-        b = 2 * (self.control - self.start)
+        a = self.start - 2*self.control + self.end
+        b = 2*(self.control - self.start)
+        a_dot_b = a.real*b.real + a.imag*b.imag
 
-        A = 4 * (a.real ** 2 + a.imag ** 2)
-        B = 4 * (a.real * b.real + a.imag * b.imag)
-        C = b.real ** 2 + b.imag ** 2
+        if abs(a) < 1e-12:
+            s = abs(b)
+        elif abs(a_dot_b + abs(a)*abs(b)) < 1e-12:
+            k = abs(b)/abs(a)
+            if k >= 2:
+                s = abs(b) - abs(a)
+            else:
+                s = abs(a)*(k**2/2 - k + 1)
+        else:
+            # For an explanation of this case, see
+            # http://www.malczak.info/blog/quadratic-bezier-curve-length/
+            A = 4 * (a.real ** 2 + a.imag ** 2)
+            B = 4 * (a.real * b.real + a.imag * b.imag)
+            C = b.real ** 2 + b.imag ** 2
 
-        Sabc = 2 * sqrt(A + B + C)
-        A2 = sqrt(A)
-        A32 = 2 * A * A2
-        C2 = 2 * sqrt(C)
-        BA = B / A2
+            Sabc = 2 * sqrt(A + B + C)
+            A2 = sqrt(A)
+            A32 = 2 * A * A2
+            C2 = 2 * sqrt(C)
+            BA = B / A2
 
-        return (A32 * Sabc + A2 * B * (Sabc - C2) + (4 * C * A - B ** 2) *
-                log((2 * A2 + BA + Sabc) / (BA + C2))) / (4 * A32)
-
+            s = (A32 * Sabc + A2 * B * (Sabc - C2) + (4 * C * A - B ** 2) *
+                    log((2 * A2 + BA + Sabc) / (BA + C2))) / (4 * A32)
+        return s
 
 class Arc(object):
 
@@ -188,6 +199,9 @@ class Arc(object):
     def _parameterize(self):
         # Conversion from endpoint to center parameterization
         # http://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes
+        if self.start == self.end:
+            # This is equivalent of omitting the segment, so do nothing
+            return
 
         cosr = cos(radians(self.rotation))
         sinr = sin(radians(self.rotation))
@@ -238,10 +252,14 @@ class Arc(object):
 
         n = sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy))
         p = ux * vx + uy * vy
-        if p == 0:
-            delta = degrees(acos(0))
-        else:
-            delta = degrees(acos(p / n))
+        d = p/n
+        # In certain cases the above calculation can through inaccuracies
+        # become just slightly out of range, f ex -1.0000000000000002.
+        if d > 1.0:
+            d = 1.0
+        elif d < -1.0:
+            d = -1.0
+        delta = degrees(acos(d))
         if (ux * vy - uy * vx) < 0:
             delta = -delta
         self.delta = delta % 360
@@ -249,6 +267,9 @@ class Arc(object):
             self.delta -= 360
 
     def point(self, pos):
+        if self.start == self.end:
+            # This is equivalent of omitting the segment
+            return self.start
         angle = radians(self.theta + (self.delta * pos))
         cosr = cos(radians(self.rotation))
         sinr = sin(radians(self.rotation))
@@ -264,9 +285,40 @@ class Arc(object):
         integration, and in that case it's simpler to just do a geometric
         approximation, as for cubic bezier curves.
         """
+        if self.start == self.end:
+            # This is equivalent of omitting the segment
+            return 0
         start_point = self.point(0)
         end_point = self.point(1)
         return segment_length(self, 0, 1, start_point, end_point, error, min_depth, 0)
+
+
+class Move(object):
+    """Represents move commands. Does nothing, but is there to handle
+    paths that consist of only move commands, which is valid, but pointless.
+    """
+
+    def __init__(self, to):
+        self.start = self.end = to
+
+    def __repr__(self):
+        return 'Move(to=%s)' % self.start
+
+    def __eq__(self, other):
+        if not isinstance(other, Move):
+            return NotImplemented
+        return self.start == other.start
+
+    def __ne__(self, other):
+        if not isinstance(other, Move):
+            return NotImplemented
+        return not self == other
+
+    def point(self, pos):
+        return self.start
+
+    def length(self, error=ERROR, min_depth=MIN_DEPTH):
+        return 0
 
 
 class Path(MutableSequence):
@@ -332,7 +384,7 @@ class Path(MutableSequence):
         self._length = sum(lengths)
         self._lengths = [each / self._length for each in lengths]
 
-    def point(self, pos):
+    def point(self, pos, error=ERROR):
 
         # Shortcuts
         if pos == 0.0:
@@ -340,7 +392,7 @@ class Path(MutableSequence):
         if pos == 1.0:
             return self._segments[-1].point(pos)
 
-        self._calc_lengths()
+        self._calc_lengths(error=error)
         # Find which segment the point we search for is located on:
         segment_start = 0
         for index, segment in enumerate(self._segments):
@@ -367,7 +419,7 @@ class Path(MutableSequence):
 
     @property
     def closed(self):
-        """Checks that the end point is the same as the start point"""
+        """Checks that the path is closed"""
         return self._closed and self._is_closable()
 
     @closed.setter
@@ -393,7 +445,8 @@ class Path(MutableSequence):
             # If the start of this segment does not coincide with the end of
             # the last segment or if this segment is actually the close point
             # of a closed path, then we should start a new subpath here.
-            if current_pos != start or (self.closed and start == end):
+            if isinstance(segment, Move) or (current_pos != start) or (
+               start == end and not isinstance(previous_segment, Move)):
                 parts.append('M {0:G},{1:G}'.format(start.real, start.imag))
 
             if isinstance(segment, Line):
